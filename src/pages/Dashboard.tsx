@@ -62,7 +62,7 @@ const Dashboard = ({ onNavigate }: { onNavigate: (page: string) => void }) => {
       setIsLoading(true)
       setError('')
       try {
-        const res = await apiFetch('/api/v1/users?page=0&size=10')
+        const res = await apiFetch('/users?page=0&size=10')
         if (!res.ok) {
           setError('Failed to load dashboard data.')
           return

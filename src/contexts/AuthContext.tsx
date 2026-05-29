@@ -24,7 +24,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    apiFetch('/api/v1/me')
+    apiFetch('/me')
       .then(async (res) => {
         if (res.ok) {
           const json = await res.json()
@@ -40,7 +40,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (emailOrUsername: string, password: string) => {
     try {
-      const res = await apiFetch('/api/v1/auth/login', {
+      const res = await apiFetch('/auth/login', {
         method: 'POST',
         body: JSON.stringify({ email_or_username: emailOrUsername, password }),
       })
@@ -52,7 +52,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const loggedIn: AuthUser = json.data.user
       if (!loggedIn.roles.includes('admin')) {
-        await apiFetch('/api/v1/auth/logout', { method: 'POST' })
+        await apiFetch('/auth/logout', { method: 'POST' })
         return { success: false, error: 'Access denied. This portal is for administrators only.' }
       }
 
@@ -64,12 +64,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const logout = async () => {
-    await apiFetch('/api/v1/auth/logout', { method: 'POST' }).catch(() => {})
+    await apiFetch('/auth/logout', { method: 'POST' }).catch(() => {})
     setUser(null)
   }
 
   const refreshUser = async () => {
-    const res = await apiFetch('/api/v1/me').catch(() => null)
+    const res = await apiFetch('/me').catch(() => null)
     if (res?.ok) {
       const json = await res.json()
       setUser(json.data)

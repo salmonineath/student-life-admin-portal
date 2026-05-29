@@ -60,7 +60,7 @@ const Settings = () => {
       setLoading(true)
       setLoadErr('')
       try {
-        const res = await apiFetch('/api/v1/me')
+        const res = await apiFetch('/me')
         if (!res.ok) { setLoadErr('Failed to load profile.'); return }
         const json = await res.json()
         const p: FullProfile = json.data

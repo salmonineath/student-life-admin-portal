@@ -103,7 +103,7 @@ const Settings = () => {
       if (form.major)         body.major         = form.major
       if (form.academic_year) body.academic_year = form.academic_year
 
-      const res = await apiFetch('/api/v1/me/update-profile', {
+      const res = await apiFetch('/me/update-profile', {
         method: 'PATCH',
         body: JSON.stringify(body),
       })

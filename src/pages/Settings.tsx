@@ -8,12 +8,10 @@ import {
   ShieldCheck,
   Loader2,
   AlertCircle,
-  CalendarDays,
   Pencil,
   X,
   CheckCircle,
   AtSign,
-  Hash,
 } from 'lucide-react'
 import { apiFetch } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -39,9 +37,6 @@ interface FormState {
   major: string
   academic_year: string
 }
-
-const formatDate = (dateStr: string) =>
-  new Date(dateStr).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 
 const Settings = () => {
   const { refreshUser } = useAuth()

@@ -78,7 +78,7 @@ const Users = () => {
     setIsLoading(true)
     setError('')
     try {
-      const res = await apiFetch(`/api/v1/users?page=${p}&size=10`)
+      const res = await apiFetch(`/users?page=${p}&size=10`)
       if (!res.ok) {
         const json = await res.json().catch(() => null)
         setError(json?.message ?? 'Failed to load users.')
@@ -119,7 +119,7 @@ const Users = () => {
   const handleDisable = async (user: ApiUser) => {
     setDisabling(user.id)
     try {
-      const res = await apiFetch(`/api/v1/users/${user.id}/disable`, { method: 'PUT' })
+      const res = await apiFetch(`/users/${user.id}/disable`, { method: 'PUT' })
       const json = await res.json().catch(() => null)
       if (res.ok) {
         addToast(`${user.fullname} has been disabled.`)

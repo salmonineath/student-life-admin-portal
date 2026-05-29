@@ -8,12 +8,10 @@ import {
   ShieldCheck,
   Loader2,
   AlertCircle,
-  CalendarDays,
   Pencil,
   X,
   CheckCircle,
   AtSign,
-  Hash,
 } from 'lucide-react'
 import { apiFetch } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -40,9 +38,6 @@ interface FormState {
   academic_year: string
 }
 
-const formatDate = (dateStr: string) =>
-  new Date(dateStr).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-
 const Settings = () => {
   const { refreshUser } = useAuth()
 
@@ -60,7 +55,7 @@ const Settings = () => {
       setLoading(true)
       setLoadErr('')
       try {
-        const res = await apiFetch('/api/v1/me')
+        const res = await apiFetch('/me')
         if (!res.ok) { setLoadErr('Failed to load profile.'); return }
         const json = await res.json()
         const p: FullProfile = json.data

@@ -18,8 +18,7 @@ const Sidebar = ({ activePage, onNavigate }: SidebarProps) => {
 
   return (
     <aside className="w-60 shrink-0 flex flex-col h-full" style={{ backgroundColor: '#0F172A' }}>
-      {/* Logo */}
-      <div className="flex items-center gap-2.5 px-5 py-5 border-b border-white/10">
+      <div className="flex items-center gap-2.5 px-5 py-5 border-b border-white/15">
         <div className="p-1.5 rounded-lg bg-indigo-500/20">
           <Shield size={18} className="text-indigo-400" />
         </div>
@@ -31,7 +30,6 @@ const Sidebar = ({ activePage, onNavigate }: SidebarProps) => {
         </div>
       </div>
 
-      {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-1">
         {NAV_ITEMS.map(({ icon: Icon, label, key }) => {
           const isActive = activePage === key
@@ -41,8 +39,8 @@ const Sidebar = ({ activePage, onNavigate }: SidebarProps) => {
               onClick={() => onNavigate(key)}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 text-left cursor-pointer ${
                 isActive
-                  ? 'bg-indigo-500/15 text-indigo-400'
-                  : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                  ? 'bg-indigo-500/20 text-indigo-300'
+                  : 'text-slate-300 hover:bg-white/8 hover:text-white'
               }`}
             >
               <Icon size={16} />
@@ -55,9 +53,8 @@ const Sidebar = ({ activePage, onNavigate }: SidebarProps) => {
         })}
       </nav>
 
-      {/* Admin profile */}
-      <div className="px-3 pb-4 border-t border-white/10 pt-3">
-        <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 transition-colors group">
+      <div className="px-3 pb-4 border-t border-white/15 pt-3">
+        <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/8 transition-colors group">
           <div
             className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
             style={{ backgroundColor: getAvatarColor(String(user?.id ?? 0)) }}
@@ -66,12 +63,12 @@ const Sidebar = ({ activePage, onNavigate }: SidebarProps) => {
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-slate-200 text-xs font-medium truncate">{user?.fullname ?? 'Admin'}</p>
-            <p className="text-slate-500 text-xs truncate">{user?.email ?? ''}</p>
+            <p className="text-slate-400 text-xs truncate">{user?.email ?? ''}</p>
           </div>
           <button
             onClick={logout}
             title="Sign out"
-            className="text-slate-600 group-hover:text-slate-400 hover:text-red-400! shrink-0 transition-colors cursor-pointer"
+            className="text-slate-400 group-hover:text-slate-300 hover:text-red-400! shrink-0 transition-colors cursor-pointer"
           >
             <LogOut size={14} />
           </button>

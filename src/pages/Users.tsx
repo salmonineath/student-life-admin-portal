@@ -6,16 +6,16 @@ import {
   UserX,
   Eye,
   Ban,
+  CheckCircle,
   ChevronLeft,
   ChevronRight,
   UserPlus,
   X,
-  CheckCircle,
   Loader2,
   AlertCircle,
 } from 'lucide-react'
 import StatsCard from '../components/StatsCard'
-import { RoleBadge } from '../components/StatusBadge'
+import { StatusBadge, RoleBadge } from '../components/StatusBadge'
 import { getInitials, getAvatarColor } from '../data/mockUsers'
 import { apiFetch } from '../services/api'
 
@@ -29,6 +29,7 @@ interface ApiUser {
   major: string | null
   academicYear: string | null
   roles: string[]
+  isActive: boolean
   createdAt: string
   updatedAt: string
 }
@@ -43,42 +44,51 @@ interface Pagination {
 }
 
 type Toast = { id: number; message: string; type: 'success' | 'info' | 'error' }
+type ConfirmModal = { user: ApiUser; action: 'disable' | 'enable' }
 
-const formatDate = (dateStr: string) =>
-  new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-
-const isNewThisMonth = (dateStr: string) => {
-  const d = new Date(dateStr)
-  const now = new Date()
-  return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
+const isNew = (dateStr: string) => {
+  return Date.now() - new Date(dateStr).getTime() < 7 * 24 * 60 * 60 * 1000
 }
 
 const Users = () => {
-  const [users, setUsers]           = useState<ApiUser[]>([])
+  const [users, setUsers] = useState<ApiUser[]>([])
   const [pagination, setPagination] = useState<Pagination>({
     currentPage: 1, pageSize: 10, totalElements: 0, totalPages: 1, hasNext: false, hasPrevious: false,
   })
-  const [page, setPage]             = useState(0) // 0-based for the API
-  const [search, setSearch]         = useState('')
+  const [page, setPage] = useState(0)
+  const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebounced] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
-  const [isLoading, setIsLoading]   = useState(true)
-  const [error, setError]           = useState('')
-  const [toasts, setToasts]         = useState<Toast[]>([])
-  const [toastCounter, setCounter]  = useState(0)
-  const [disabling, setDisabling]   = useState<number | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [toasts, setToasts] = useState<Toast[]>([])
+  const [toastCounter, setCounter] = useState(0)
+  const [toggling, setToggling] = useState<number | null>(null)
+  const [confirmModal, setConfirmModal] = useState<ConfirmModal | null>(null)
 
   const addToast = (message: string, type: Toast['type'] = 'success') => {
     const id = toastCounter + 1
     setCounter(id)
-    setToasts((prev) => [...prev, { id, message, type }])
-    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500)
+    setToasts(prev => [...prev, { id, message, type }])
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3500)
   }
 
-  const fetchUsers = async (p: number) => {
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebounced(search)
+      setPage(0)
+    }, 350)
+    return () => clearTimeout(t)
+  }, [search])
+
+  const fetchUsers = async (p: number, q: string, role: string) => {
     setIsLoading(true)
     setError('')
     try {
-      const res = await apiFetch(`/users?page=${p}&size=10`)
+      const params = new URLSearchParams({ page: String(p), size: '10', sort: 'createdAt,desc' })
+      if (q) params.set('search', q)
+      if (role !== 'all') params.set('role', role)
+      const res = await apiFetch(`/users?${params}`)
       if (!res.ok) {
         const json = await res.json().catch(() => null)
         setError(json?.message ?? 'Failed to load users.')
@@ -94,43 +104,40 @@ const Users = () => {
     }
   }
 
-  useEffect(() => { fetchUsers(page) }, [page])
+  useEffect(() => { fetchUsers(page, debouncedSearch, roleFilter) }, [page, debouncedSearch, roleFilter])
+
+  const handleRoleChange = (value: string) => {
+    setRoleFilter(value)
+    setPage(0)
+  }
 
   const stats = useMemo(() => ({
-    total:        pagination.totalElements,
-    students:     users.filter((u) => u.roles.includes('student')).length,
-    admins:       users.filter((u) => u.roles.includes('admin')).length,
-    newThisMonth: users.filter((u) => isNewThisMonth(u.createdAt)).length,
+    total: pagination.totalElements,
+    students: users.filter(u => u.roles.includes('student')).length,
+    admins: users.filter(u => u.roles.includes('admin')).length,
+    newThisWeek: users.filter(u => isNew(u.createdAt)).length,
   }), [users, pagination.totalElements])
 
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase()
-    return users.filter((u) => {
-      const matchSearch =
-        !q ||
-        u.fullname.toLowerCase().includes(q) ||
-        u.email.toLowerCase().includes(q) ||
-        u.username.toLowerCase().includes(q)
-      const matchRole = roleFilter === 'all' || u.roles.includes(roleFilter)
-      return matchSearch && matchRole
-    })
-  }, [users, search, roleFilter])
+  const hasFilters = debouncedSearch || roleFilter !== 'all'
 
-  const handleDisable = async (user: ApiUser) => {
-    setDisabling(user.id)
+  const handleConfirm = async () => {
+    if (!confirmModal) return
+    const { user, action } = confirmModal
+    setConfirmModal(null)
+    setToggling(user.id)
     try {
-      const res = await apiFetch(`/users/${user.id}/disable`, { method: 'PUT' })
+      const res = await apiFetch(`/users/${user.id}/${action}`, { method: 'PUT' })
       const json = await res.json().catch(() => null)
       if (res.ok) {
-        addToast(`${user.fullname} has been disabled.`)
-        fetchUsers(page)
+        addToast(`${user.fullname} has been ${action === 'disable' ? 'deactivated' : 'reactivated'}.`)
+        fetchUsers(page, debouncedSearch, roleFilter)
       } else {
-        addToast(json?.message ?? 'Failed to disable user.', 'error')
+        addToast(json?.message ?? `Failed to ${action === 'disable' ? 'deactivate' : 'reactivate'} user.`, 'error')
       }
     } catch {
       addToast('Network error.', 'error')
     } finally {
-      setDisabling(null)
+      setToggling(null)
     }
   }
 
@@ -138,79 +145,71 @@ const Users = () => {
     addToast(`${user.fullname} · ${user.username} · ${user.email}`, 'info')
   }
 
-  const hasFilters = search || roleFilter !== 'all'
-
   const pageNumbers = useMemo(() => {
     const cur = pagination.currentPage
     const total = pagination.totalPages
     const start = Math.max(1, cur - 2)
-    const end   = Math.min(total, cur + 2)
+    const end = Math.min(total, cur + 2)
     return Array.from({ length: end - start + 1 }, (_, i) => start + i)
   }, [pagination.currentPage, pagination.totalPages])
 
   return (
     <div className="space-y-5">
-      {/* Stats row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard
           label="Total Users"
           value={stats.total}
           icon={UsersIcon}
-          iconBg="bg-indigo-50"
-          iconColor="text-indigo-600"
-          trend={stats.newThisMonth > 0 ? { value: stats.newThisMonth, label: 'joined this month' } : undefined}
+          iconBg="bg-indigo-100"
+          iconColor="text-indigo-700"
+          trend={stats.newThisWeek > 0 ? { value: stats.newThisWeek, label: 'joined this week' } : undefined}
         />
         <StatsCard
           label="Students"
           value={stats.students}
           icon={UserCheck}
-          iconBg="bg-blue-50"
-          iconColor="text-blue-600"
+          iconBg="bg-blue-100"
+          iconColor="text-blue-700"
         />
         <StatsCard
           label="Admins"
           value={stats.admins}
           icon={Shield}
-          iconBg="bg-rose-50"
-          iconColor="text-rose-600"
+          iconBg="bg-rose-100"
+          iconColor="text-rose-700"
         />
         <StatsCard
           label="Other Roles"
           value={users.length - stats.students - stats.admins}
           icon={UserX}
-          iconBg="bg-slate-100"
-          iconColor="text-slate-500"
+          iconBg="bg-slate-200"
+          iconColor="text-slate-600"
         />
       </div>
 
-      {/* Table card */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-        {/* Toolbar */}
-        <div className="flex flex-wrap items-center gap-3 px-5 py-4 border-b border-slate-100">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="flex flex-wrap items-center gap-3 px-5 py-4 border-b border-slate-200">
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <span className="text-sm font-semibold text-slate-800">All Users</span>
-            <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full font-medium">
-              {isLoading ? '…' : filtered.length}
+            <span className="text-xs text-slate-600 bg-slate-200 px-2 py-0.5 rounded-full font-medium">
+              {isLoading ? '…' : pagination.totalElements}
             </span>
           </div>
 
-          {/* Role filter */}
           <select
             value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value)}
-            className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-600 bg-white outline-none focus:border-indigo-400 cursor-pointer"
+            onChange={e => handleRoleChange(e.target.value)}
+            className="text-sm border border-slate-300 rounded-lg px-3 py-1.5 text-slate-700 bg-white outline-none focus:border-indigo-400 cursor-pointer"
           >
             <option value="all">All roles</option>
             <option value="student">Students</option>
-            <option value="faculty">Faculty</option>
-            <option value="staff">Staff</option>
             <option value="admin">Admins</option>
           </select>
 
           {hasFilters && (
             <button
               onClick={() => { setSearch(''); setRoleFilter('all') }}
-              className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 border border-slate-200 rounded-lg px-2.5 py-1.5 transition-colors cursor-pointer"
+              className="flex items-center gap-1 text-xs text-slate-600 hover:text-slate-800 border border-slate-300 rounded-lg px-2.5 py-1.5 transition-colors cursor-pointer"
             >
               <X size={12} /> Clear
             </button>
@@ -225,29 +224,27 @@ const Users = () => {
           </button>
         </div>
 
-        {/* Search bar */}
-        <div className="px-5 py-3 border-b border-slate-50">
+        <div className="px-5 py-3 border-b border-slate-200">
           <input
             type="text"
             placeholder="Search by name, username or email…"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-slate-700 placeholder-slate-400 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400/20 transition"
+            onChange={e => setSearch(e.target.value)}
+            className="w-full text-sm bg-slate-100 border border-slate-300 rounded-xl px-3.5 py-2 text-slate-800 placeholder-slate-500 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400/20 transition"
           />
         </div>
 
-        {/* Content */}
         {isLoading ? (
-          <div className="flex items-center justify-center py-16 gap-2.5 text-slate-400 text-sm">
+          <div className="flex items-center justify-center py-16 gap-2.5 text-slate-500 text-sm">
             <Loader2 size={16} className="animate-spin" />
             Loading users…
           </div>
         ) : error ? (
-          <div className="flex items-center justify-center py-16 gap-2.5 text-red-400 text-sm">
+          <div className="flex items-center justify-center py-16 gap-2.5 text-red-600 text-sm">
             <AlertCircle size={16} />
             {error}
             <button
-              onClick={() => fetchUsers(page)}
+              onClick={() => fetchUsers(page, debouncedSearch, roleFilter)}
               className="underline hover:no-underline ml-1 cursor-pointer"
             >
               Retry
@@ -257,25 +254,24 @@ const Users = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-100">
-                  <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wide px-5 py-3">User</th>
-                  <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wide px-3 py-3">Role</th>
-                  <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wide px-3 py-3">University / Major</th>
-                  <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wide px-3 py-3">Joined</th>
-                  <th className="text-right text-xs font-semibold text-slate-400 uppercase tracking-wide px-5 py-3">Actions</th>
+                <tr className="bg-slate-100 border-b border-slate-200">
+                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-5 py-3">User</th>
+                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-3 py-3">Role</th>
+                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-3 py-3">Status</th>
+                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-3 py-3">University / Major</th>
+                  <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wide px-5 py-3">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-50">
-                {filtered.length === 0 ? (
+              <tbody className="divide-y divide-slate-100">
+                {users.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="text-center text-slate-400 py-12 text-sm">
+                    <td colSpan={5} className="text-center text-slate-500 py-12 text-sm">
                       No users match your filters.
                     </td>
                   </tr>
                 ) : (
-                  filtered.map((user) => (
-                    <tr key={user.id} className="hover:bg-slate-50/60 transition-colors group">
-                      {/* User */}
+                  users.map(user => (
+                    <tr key={user.id} className="hover:bg-slate-50 transition-colors group">
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-3">
                           <div
@@ -287,58 +283,58 @@ const Users = () => {
                           <div className="min-w-0">
                             <div className="flex items-center gap-1.5">
                               <p className="font-medium text-slate-800 truncate">{user.fullname}</p>
-                              {isNewThisMonth(user.createdAt) && (
-                                <span className="text-[10px] font-semibold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-full border border-indigo-100 shrink-0">
+                              {isNew(user.createdAt) && (
+                                <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-100 px-1.5 py-0.5 rounded-full border border-indigo-200 shrink-0">
                                   New
                                 </span>
                               )}
                             </div>
-                            <p className="text-xs text-slate-400 truncate">@{user.username} · {user.email}</p>
+                            <p className="text-xs text-slate-500 truncate">{user.username} · {user.email}</p>
                           </div>
                         </div>
                       </td>
 
-                      {/* Roles */}
                       <td className="px-3 py-3.5">
                         <div className="flex flex-wrap gap-1">
-                          {user.roles.map((role) => (
+                          {user.roles.map(role => (
                             <RoleBadge key={role} role={role} />
                           ))}
                         </div>
                       </td>
 
-                      {/* University / Major */}
+                      <td className="px-3 py-3.5">
+                        <StatusBadge status={user.isActive ? 'active' : 'inactive'} />
+                      </td>
+
                       <td className="px-3 py-3.5 text-xs">
-                        <p className="text-slate-600 truncate max-w-[180px]">{user.university ?? '—'}</p>
+                        <p className="text-slate-700 truncate max-w-[180px]">{user.university ?? '—'}</p>
                         {user.major && (
-                          <p className="text-slate-400 truncate max-w-[180px]">{user.major}</p>
+                          <p className="text-slate-500 truncate max-w-[180px]">{user.major}</p>
                         )}
                       </td>
 
-                      {/* Joined */}
-                      <td className="px-3 py-3.5 text-slate-500 text-xs whitespace-nowrap">
-                        {formatDate(user.createdAt)}
-                      </td>
-
-                      {/* Actions */}
                       <td className="px-5 py-3.5">
                         <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
                             onClick={() => handleView(user)}
                             title="View"
-                            className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors cursor-pointer"
+                            className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-600 hover:text-slate-800 transition-colors cursor-pointer"
                           >
                             <Eye size={14} />
                           </button>
                           <button
-                            onClick={() => handleDisable(user)}
-                            title="Disable user"
-                            disabled={disabling === user.id}
-                            className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 disabled:opacity-40 transition-colors cursor-pointer"
+                            onClick={() => setConfirmModal({ user, action: user.isActive ? 'disable' : 'enable' })}
+                            title={user.isActive ? 'Deactivate user' : 'Reactivate user'}
+                            disabled={toggling === user.id}
+                            className={`p-1.5 rounded-lg disabled:opacity-40 transition-colors cursor-pointer ${
+                              user.isActive
+                                ? 'hover:bg-red-100 text-slate-500 hover:text-red-600'
+                                : 'hover:bg-emerald-100 text-slate-500 hover:text-emerald-600'
+                            }`}
                           >
-                            {disabling === user.id
+                            {toggling === user.id
                               ? <Loader2 size={14} className="animate-spin" />
-                              : <Ban size={14} />}
+                              : user.isActive ? <Ban size={14} /> : <CheckCircle size={14} />}
                           </button>
                         </div>
                       </td>
@@ -350,37 +346,36 @@ const Users = () => {
           </div>
         )}
 
-        {/* Pagination */}
         {!isLoading && !error && (
-          <div className="flex items-center justify-between px-5 py-3.5 border-t border-slate-100">
-            <p className="text-xs text-slate-400">
+          <div className="flex items-center justify-between px-5 py-3.5 border-t border-slate-200">
+            <p className="text-xs text-slate-500">
               Page {pagination.currentPage} of {pagination.totalPages} · {pagination.totalElements} users total
             </p>
             <div className="flex items-center gap-1">
               <button
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                onClick={() => setPage(p => Math.max(0, p - 1))}
                 disabled={!pagination.hasPrevious}
-                className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
               >
                 <ChevronLeft size={16} />
               </button>
-              {pageNumbers.map((p) => (
+              {pageNumbers.map(p => (
                 <button
                   key={p}
                   onClick={() => setPage(p - 1)}
                   className={`w-7 h-7 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                     p === pagination.currentPage
                       ? 'bg-indigo-600 text-white'
-                      : 'text-slate-500 hover:bg-slate-100'
+                      : 'text-slate-600 hover:bg-slate-200'
                   }`}
                 >
                   {p}
                 </button>
               ))}
               <button
-                onClick={() => setPage((p) => p + 1)}
+                onClick={() => setPage(p => p + 1)}
                 disabled={!pagination.hasNext}
-                className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
               >
                 <ChevronRight size={16} />
               </button>
@@ -389,20 +384,52 @@ const Users = () => {
         )}
       </div>
 
-      {/* Toast notifications */}
+      {confirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 p-6">
+            <h3 className="text-base font-semibold text-slate-800">
+              {confirmModal.action === 'disable' ? 'Deactivate user?' : 'Reactivate user?'}
+            </h3>
+            <p className="text-sm text-slate-500 mt-2">
+              {confirmModal.action === 'disable'
+                ? `${confirmModal.user.fullname} will no longer be able to log in.`
+                : `${confirmModal.user.fullname} will regain access to the platform.`}
+            </p>
+            <div className="flex gap-3 mt-6 justify-end">
+              <button
+                onClick={() => setConfirmModal(null)}
+                className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 border border-slate-300 rounded-xl transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirm}
+                className={`px-4 py-2 text-sm font-medium text-white rounded-xl transition-colors cursor-pointer ${
+                  confirmModal.action === 'disable'
+                    ? 'bg-red-600 hover:bg-red-700'
+                    : 'bg-emerald-600 hover:bg-emerald-700'
+                }`}
+              >
+                Yes, {confirmModal.action === 'disable' ? 'deactivate' : 'reactivate'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="fixed bottom-5 right-5 space-y-2 z-50 pointer-events-none">
-        {toasts.map((toast) => (
+        {toasts.map(toast => (
           <div
             key={toast.id}
             className={`flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg text-sm font-medium pointer-events-auto animate-in slide-in-from-bottom-2 ${
               toast.type === 'success' ? 'bg-slate-900 text-white' :
-              toast.type === 'error'   ? 'bg-red-600 text-white' :
-              'bg-white text-slate-700 border border-slate-200'
+              toast.type === 'error' ? 'bg-red-600 text-white' :
+              'bg-white text-slate-800 border border-slate-300'
             }`}
           >
             {toast.type === 'success' && <CheckCircle size={14} className="text-emerald-400 shrink-0" />}
-            {toast.type === 'error'   && <AlertCircle size={14} className="text-red-200 shrink-0" />}
-            {toast.type === 'info'    && <Eye size={14} className="text-indigo-400 shrink-0" />}
+            {toast.type === 'error' && <AlertCircle size={14} className="text-red-200 shrink-0" />}
+            {toast.type === 'info' && <Eye size={14} className="text-indigo-500 shrink-0" />}
             {toast.message}
           </div>
         ))}

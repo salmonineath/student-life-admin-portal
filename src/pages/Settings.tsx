@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import { apiFetch } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
-import { getInitials, getAvatarColor } from '../data/mockUsers'
+import { getInitials, getAvatarColor } from '../utils/avatar'
 
 interface FullProfile {
   id: number

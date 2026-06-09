@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import StatsCard from '../components/StatsCard'
 import { RoleBadge } from '../components/StatusBadge'
-import { getInitials, getAvatarColor } from '../data/mockUsers'
+import { getInitials, getAvatarColor } from '../utils/avatar'
 import { apiFetch } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 

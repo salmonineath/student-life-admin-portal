@@ -1,5 +1,5 @@
 import { LayoutDashboard, Users, Settings, Shield, LogOut } from 'lucide-react'
-import { getInitials, getAvatarColor } from '../data/mockUsers'
+import { getInitials, getAvatarColor } from '../utils/avatar'
 import { useAuth } from '../contexts/AuthContext'
 
 const NAV_ITEMS = [

@@ -88,7 +88,7 @@ const Users = () => {
       const params = new URLSearchParams({ page: String(p), size: '10', sort: 'createdAt,desc' })
       if (q) params.set('search', q)
       if (role !== 'all') params.set('role', role)
-      const res = await apiFetch(`/users?${params}`)
+      const res = await apiFetch(`admin/users?${params}`)
       if (!res.ok) {
         const json = await res.json().catch(() => null)
         setError(json?.message ?? 'Failed to load users.')
